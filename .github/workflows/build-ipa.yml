@@ -79,9 +79,19 @@ jobs:
 
       - name: Package .ipa
         run: |
-          APP="$(find build_ios -name Blender.app -type d | head -1)"
-          echo "app bundle: $APP"
-          test -n "$APP" || { echo "::error::Blender.app not found"; exit 1; }
+          # Find the iOS Blender.app that actually contains the executable
+          # (skip the macOS host-tools build in build_darwin_tools).
+          APP=""
+             for a in $(find build_ios -name Blender.app -type d -not -path
+  '*build_darwin_tools*'); do        
+             EXE="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable'
+  "$a/Info.plist" 2>/dev/null || echo Blender)"
+             echo "candidate: $a (executable: $EXE)"
+               ls -la "$a" | head -15
+               if [ -z "$APP" ] && [ -f "$a/$EXE" ]; then APP="$a"; fi
+               done
+               echo "app bundle: $APP"
+               test -n "$APP" || { echo "::error::iOS Blender.app with executable not found"; find build_ios -name Blender.app -type d; exit 1; }
           # Bundle precompiled iOS dylibs into the app (mirrors the reference recipe).
           LIBDST="$APP/Assets/lib"; mkdir -p "$LIBDST"
           find blender/lib/ios_arm64 -name '*.dylib' \( -type f -o -type l \) -exec cp -fL {} "$LIBDST/" \; || true
